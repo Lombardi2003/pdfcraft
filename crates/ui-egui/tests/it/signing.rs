@@ -721,6 +721,29 @@ fn the_validation_marks_over_signatures_can_be_turned_off() {
             })
             .count()
     };
+    // The status mark is the Valid icon, tinted green and centred on the widget.
+    let green = egui::Color32::from_rgb(0x2D, 0x9D, 0x78);
+    let marks = |h: &Harness<'static, PdfCraftApp>| {
+        let (a, b) = (at(h, widget[0] as f32, widget[3] as f32), at(h, widget[2] as f32, widget[1] as f32));
+        let centre = egui::Rect::from_two_pos(a, b).center();
+        h.output()
+            .shapes
+            .iter()
+            .filter(|c| (c.shape.visual_bounding_rect().center() - centre).length() < 2.0)
+            .filter(|c| match &c.shape {
+                egui::Shape::Mesh(m) => m.vertices.iter().any(|v| v.color == green),
+                egui::Shape::Rect(r) => r.fill == green,
+                _ => false,
+            })
+            .count()
+    };
+    // Hovering the mark shows the verdict.
+    let hover_says_valid = |h: &mut Harness<'static, PdfCraftApp>| {
+        let centre = at(h, (widget[0] + widget[2]) as f32 / 2.0, (widget[1] + widget[3]) as f32 / 2.0);
+        h.hover_at(centre);
+        h.run_steps(2);
+        h.query_by_label("Signature is valid").is_some()
+    };
     let status = |h: &Harness<'static, PdfCraftApp>| {
         let s = h.state();
         s.session.get(s.views[0].id).unwrap().signatures.iter().find(|x| x.signed).map(|x| x.status)
@@ -728,10 +751,14 @@ fn the_validation_marks_over_signatures_can_be_turned_off() {
     assert!(h.state().show_signature_badges, "on by default");
     assert_eq!(status(&h), Some(SignatureStatus::Valid));
     assert_eq!(outlines(&h), 1, "the valid signature is outlined");
+    assert!(marks(&h) > 0, "and carries the status mark");
+    assert!(hover_says_valid(&mut h), "whose hover gives the verdict");
 
     h.state_mut().set_option("signature-badges", "false").unwrap();
     h.run_steps(2);
     assert_eq!(outlines(&h), 0, "no outline once the marks are off");
+    assert_eq!(marks(&h), 0, "no status mark either");
+    assert!(!hover_says_valid(&mut h), "and no hover over where it was");
     assert_eq!(status(&h), Some(SignatureStatus::Valid), "validation is unchanged");
     h.get_by_label("Signed and all signatures are valid.");
 
@@ -742,5 +769,7 @@ fn the_validation_marks_over_signatures_can_be_turned_off() {
     h.state_mut().set_option("signature-badges", "true").unwrap();
     h.run_steps(2);
     assert_eq!(outlines(&h), 1);
+    assert!(marks(&h) > 0);
+    assert!(hover_says_valid(&mut h));
     assert_eq!(h.state_mut().set_option("signature-badges", "maybe"), Err("signature-badges must be true or false".into()));
 }
